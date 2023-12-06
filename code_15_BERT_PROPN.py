@@ -15,11 +15,12 @@ import torch
 from tqdm import tqdm
 from transformers import BertTokenizer,BertModel,BertConfig
 
-#指定设备
+# 指定设备
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 #读取数据
+# 读取数据 变量命名有问题？
 df_test = pd.read_csv("gap-coreference/gap-development.tsv", delimiter="\t")
 df_train_val = pd.concat([
     pd.read_csv("gap-coreference/gap-test.tsv", delimiter="\t"),
@@ -85,16 +86,20 @@ def savepkl(df,name):
     for _, row in tqdm(df.iterrows(),total=len(df)):
         #循环内部
         text = insert_tag(row)#插入标签
+        # 97
         sequence_ind = tokenizer.encode(text)#向量化
+        # 94, 3. 42+1->42:30522 46+1->45:30523 64+1->62:30524 ?按前后顺序一次删掉特殊标记
         tokens, offsets,_ = tokenize(sequence_ind, tokenizer)#获取标签偏移
         token_tensor = torch.LongTensor([tokens]).to(device)
         # 错误写法
-        # bert_outputs,bert_last_outputs =  model(token_tensor)  #[1, 107, 768] , [1, 768]
+        # bert_outputs,bert_last_outputs =  model(token_tensor)  #[1, 94, 768] , [1, 768]
         # res = model(token_tensor)
         # bert_outputs, bert_last_outputs = res['last_hidden_state'], res['pooler_output']
-        bert_outputs,bert_last_outputs =  model(token_tensor)[:2]  #[1, 107, 768] , [1, 768]
+        bert_outputs,bert_last_outputs = model(token_tensor)[:2]  #[1, 94, 768] , [1, 768]
+        # (1, 3, 768)
         extracted_outputs = bert_outputs[:,offsets,:]#根据偏移位置抽取特征向量
         bert_prediction.append(extracted_outputs.cpu().numpy())
+    # 所有样本的 1代词+2名称 的BERT向量, 保存起来
     pickle.dump(bert_prediction, open(name, "wb"))
 
 

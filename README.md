@@ -9,4 +9,10 @@
 
 默认同步 /tmp/pycharm_project_954
 我的设置 /tmp/pycharm_project_pytorch-GNN
-结果2个都存在，而且生成的文件在/tmp/pycharm_project_pytorch-GNN
+结果2个目录都存在，而且生成的文件在/tmp/pycharm_project_pytorch-GNN
+
+
+```shell
+pip install transformers
+pip install transformers -i https://pypi.python.org/simple
+```
