@@ -71,6 +71,7 @@ def tokenize(sequence_ind, tokenizer, sequence_mask=None):  # 将标签分离，
             entries[tokenstr] = len(final_tokens)
             continue
         final_tokens.append(one)
+        # 为什么写在for里面
         if sequence_mask is not None:
             final_mask.append(sequence_mask[i])
     return final_tokens, (entries["[THISISA]"], entries["[THISISB]"], entries["[THISISP]"]), final_mask
