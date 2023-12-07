@@ -35,18 +35,25 @@ from sklearn import metrics
 
 '''加载预处理文件'''
 base_dir = 'output/'
+
+# 训练数据
+# tokens_NoPUNC     2454,266
+# offsets_NoPUNC    2454,3
+# PROPN_bert        2454,1,3,768
+# bert_forNoPUNC    2454,1,266,768
 offsets_NoPUNC = pickle.load(open(base_dir + 'offsets_NoPUNC.pkl', "rb"))
 tokens_NoPUNC = pickle.load(open(base_dir + 'tokens_NoPUNC_padding.pkl', "rb"))  # tokens of every sentence without padding
 bert_forNoPUNC = pickle.load(open(base_dir + 'bert_outputs_forNoPUNC.pkl', "rb"))  # list of outputs of bert for every sentence
+PROPN_bert = pickle.load(open(base_dir + 'bert_outputs_forPROPN.pkl', "rb"))
 
+# 测试数据
 test_offsets_NoPUNC = pickle.load(open(base_dir + 'test_offsets_NoPUNC.pkl', "rb"))
 test_tokens_NoPUNC = pickle.load(
     open(base_dir + 'test_tokens_NoPUNC_padding.pkl', "rb"))  # tokens of every sentence without padding
 test_bert_forNoPUNC = pickle.load(
     open(base_dir + 'test_bert_outputs_forNoPUNC.pkl', "rb"))  # list of outputs of bert for every sentence
-
-PROPN_bert = pickle.load(open(base_dir + 'bert_outputs_forPROPN.pkl', "rb"))
 test_PROPN_bert = pickle.load(open(base_dir + 'test_bert_outputs_forPROPN.pkl', "rb"))
+
 
 tokenizer, _ = getmodel()  # 加载BERT分词工具
 # parser = spacy.load('en')  # 加载SpaCy模型  'en_core_web_sm')#en_core_web_lg
@@ -56,16 +63,13 @@ parser = spacy.load("en_core_web_sm")
 
 # 生成图结构数据
 def getGraphsData(tokens_NoPUNC, offsets_NoPUNC, PROPN_bert, bert_forNoPUNC):
-    # tokens_NoPUNC     2454,266
-    # offsets_NoPUNC    2454,3
-    # PROPN_bert        2454,1,3,768
-    # bert_forNoPUNC    2454,1,266,768
     # 2454
     assert len(tokens_NoPUNC) == len(offsets_NoPUNC) == len(PROPN_bert) == len(bert_forNoPUNC)
     # 266=269-3. cod_16: max_len = 269  # 设置处理文本的最大长度
     assert len(tokens_NoPUNC[0]) == len(bert_forNoPUNC[0][0])
     assert len(offsets_NoPUNC[0]) == len(PROPN_bert[0][0]) == 3
     # 101: [CLS]  102: [SEP]  103: [MASK]
+
     all_graphs = []
     gcn_offsets = []
     for i, sent_token in enumerate(tokens_NoPUNC):
@@ -547,7 +551,9 @@ df_sub = pd.DataFrame(np.concatenate([final_test_preds, result], -1), columns=["
 df_sub["ID"] = test_df.ID
 df_sub["target"] = test_df["target"]
 df_sub = df_sub[['ID', "A", "B", "NEITHER", "result", "target"]]
-df_sub.head(50)
+print('df_sub')
+print(df_sub.head(50))
 df_sub.to_csv(base_dir + "submission_415_copy3.csv", index=False)
 
 acc = metrics.accuracy_score(test_df["target"].values, np.argmax(final_test_preds, -1))
+print('acc', acc)
