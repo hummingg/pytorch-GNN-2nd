@@ -34,47 +34,66 @@ from operator import itemgetter
 from sklearn import metrics
 
 '''加载预处理文件'''
-offsets_NoPUNC = pickle.load(open('offsets_NoPUNC.pkl', "rb"))
-tokens_NoPUNC = pickle.load(open('tokens_NoPUNC_padding.pkl', "rb"))  # tokens of every sentence without padding
-bert_forNoPUNC = pickle.load(open('bert_outputs_forNoPUNC.pkl', "rb"))  # list of outputs of bert for every sentence
+base_dir = 'output/'
+offsets_NoPUNC = pickle.load(open(base_dir + 'offsets_NoPUNC.pkl', "rb"))
+tokens_NoPUNC = pickle.load(open(base_dir + 'tokens_NoPUNC_padding.pkl', "rb"))  # tokens of every sentence without padding
+bert_forNoPUNC = pickle.load(open(base_dir + 'bert_outputs_forNoPUNC.pkl', "rb"))  # list of outputs of bert for every sentence
 
-test_offsets_NoPUNC = pickle.load(open('test_offsets_NoPUNC.pkl', "rb"))
+test_offsets_NoPUNC = pickle.load(open(base_dir + 'test_offsets_NoPUNC.pkl', "rb"))
 test_tokens_NoPUNC = pickle.load(
-    open('test_tokens_NoPUNC_padding.pkl', "rb"))  # tokens of every sentence without padding
+    open(base_dir + 'test_tokens_NoPUNC_padding.pkl', "rb"))  # tokens of every sentence without padding
 test_bert_forNoPUNC = pickle.load(
-    open('test_bert_outputs_forNoPUNC.pkl', "rb"))  # list of outputs of bert for every sentence
+    open(base_dir + 'test_bert_outputs_forNoPUNC.pkl', "rb"))  # list of outputs of bert for every sentence
 
-PROPN_bert = pickle.load(open('bert_outputs_forPROPN.pkl', "rb"))
-test_PROPN_bert = pickle.load(open('test_bert_outputs_forPROPN.pkl', "rb"))
+PROPN_bert = pickle.load(open(base_dir + 'bert_outputs_forPROPN.pkl', "rb"))
+test_PROPN_bert = pickle.load(open(base_dir + 'test_bert_outputs_forPROPN.pkl', "rb"))
 
 tokenizer, _ = getmodel()  # 加载BERT分词工具
-parser = spacy.load('en')  # 加载SpaCy模型  'en_core_web_sm')#en_core_web_lg
+# parser = spacy.load('en')  # 加载SpaCy模型  'en_core_web_sm')#en_core_web_lg
+parser = spacy.load("en_core_web_sm")
 
+########################################################################
 
 # 生成图结构数据
 def getGraphsData(tokens_NoPUNC, offsets_NoPUNC, PROPN_bert, bert_forNoPUNC):
+    # tokens_NoPUNC     2454,266
+    # offsets_NoPUNC    2454,3
+    # PROPN_bert        2454,1,3,768
+    # bert_forNoPUNC    2454,1,266,768
+    # 2454
+    assert len(tokens_NoPUNC) == len(offsets_NoPUNC) == len(PROPN_bert) == len(bert_forNoPUNC)
+    # 266=269-3. cod_16: max_len = 269  # 设置处理文本的最大长度
+    assert len(tokens_NoPUNC[0]) == len(bert_forNoPUNC[0][0])
+    assert len(offsets_NoPUNC[0]) == len(PROPN_bert[0][0]) == 3
+    # 101: [CLS]  102: [SEP]  103: [MASK]
     all_graphs = []
     gcn_offsets = []
     for i, sent_token in enumerate(tokens_NoPUNC):
-
+        # 不一定是len(sent_token)-1，因为后面可能补0
         SEPid = sent_token.index(tokenizer.convert_tokens_to_ids('[SEP]'))
 
-        # 去掉所有#
+        # 去掉所有 '##' 和 '[CLS]'
         sent = ' '.join(re.sub("[#]", "", token) for token in tokenizer.convert_ids_to_tokens(sent_token[1:SEPid]))
+        assert len(sent.split(' ')) == SEPid-1
 
         doc = parser(sent)  # 将句子切分成单词，英文中一般使用空格分隔
         parse_rst = doc.to_json()  # 获得句子中各个单词间的依存关系树
 
+        # 目标代词、A、B [69, 71, 74]
         target_offset_list = [item - 1 for item in offsets_NoPUNC[i]]  # 所有的偏移都去掉一个（[CLS]）
 
+        # 单词
+        # # word_id -> node_id，两种id并不一致
         nodes = collections.OrderedDict()  # 带有顺序的字典 key为句子中的id，value为节点的真实索引
         edges = []
         edge_type = []
 
         #  通过  parse_rst['tokens'][69]可以看到详细信息
         # 解析依存关系
+        # {'id': 0, 'start': 0, 'end': 4, 'tag': 'IN', 'pos': 'SCONJ', 'morph': '', 'lemma': 'upon', 'dep': 'prep', 'head': 11}
+        # {'id': 1, 'start': 5, 'end': 10, 'tag': 'PRP$', 'pos': 'PRON', 'morph': 'Number=Plur|Person=3|Poss=Yes|PronType=Prs', 'lemma': 'their', 'dep': 'poss', 'head': 2}
         for i_word, word in enumerate(parse_rst['tokens']):
-            # 生成的图中，找到代词节点以及对应的边
+            # 生成的图中，找到代词节点、A、B以及含有它们的边
             if (i_word in target_offset_list) or (word['head'] in target_offset_list):
                 if i_word not in nodes:
                     nodes[i_word] = len(nodes)  # 添加依存关系节点
@@ -86,15 +105,19 @@ def getGraphsData(tokens_NoPUNC, offsets_NoPUNC, PROPN_bert, bert_forNoPUNC):
                     edge_type.append(0)
 
                 if word['dep'] != 'ROOT':
-                    edges.append([word['head'], word['id']])  # 添加依存关系边（head-》node）
+                    edges.append([word['head'], word['id']])  # 添加依存关系边（head_id 被依赖 -> word_id 依赖）
                     edge_type.append(1)  # 依存关系的索引为1
-                    edges.append([word['id'], word['head']])  # 添加反向依存关系边（head《-node）
+                    edges.append([word['id'], word['head']])  # 添加反向依存关系边（head_id <- word_id）
                     edge_type.append(2)  # 反向依存关系的索引为2
 
+        # word_id -> node_id，两种id并不一致
+        # nodes: OrderedDict([(69, 0), (65, 1), (71, 2), (70, 3), (72, 4), (74, 5), (75, 6)])
+        # word_id<-head_id: 69<-65, 71<-70, 71->72, 74<-75
         tran_edges = []
+        # 自环边 + 双向边 [[1, 0], [0, 1], [3, 2], [2, 3], [2, 4], [4, 2], [6, 5], [5, 6]]
         for e1, e2 in edges:  # 将句子中的边，换成节点间的边
             tran_edges.append([nodes[e1], nodes[e2]])
-            # 将句子中的代词位置，换成节点中的代词索引
+        # 将句子中的代词位置，换成节点中的代词索引
         gcn_offset = [nodes[offset] for offset in target_offset_list]
         gcn_offsets.append(gcn_offset)  # 将代词、名称A、名称B对应图中节点的索引保存起来
 
@@ -104,21 +127,25 @@ def getGraphsData(tokens_NoPUNC, offsets_NoPUNC, PROPN_bert, bert_forNoPUNC):
         G.add_edges(list(zip(*tran_edges))[0], list(zip(*tran_edges))[1])
         # 给每个节点添加特征属性
         for i_word, word in nodes.items():
+            # 75, 6
             if (i_word in target_offset_list):  # 从PROPN_bert中获取代词、名称A、名称B的特征
+                # [0]: bert输出多一维
                 G.nodes[[nodes[i_word]]].data['h'] = torch.from_numpy(
                     PROPN_bert[i][0][target_offset_list.index(i_word)]).unsqueeze(0).to(device)
             else:  # bert_forNoPUNC中获取其它词的特征
+                # +1: 因为头部的[CLS]
                 G.nodes[[nodes[i_word]]].data['h'] = torch.from_numpy(
                     bert_forNoPUNC[i][0][i_word + 1]).unsqueeze(0).to(device)
 
         edge_norm = []  # 归一化算子（计算均值时的分母）
+        # 按图的边索引遍历 e1->e2
         for e1, e2 in tran_edges:
             if e1 == e2:
                 edge_norm.append(1)  # 如果是自环边，则归一化算子为1
             else:  # 如果是非自环边，则归一化算子为1除以去掉自环的度
-                edge_norm.append(1 / (G.in_degree(e2) - 1))  # 去掉自环的度
+                edge_norm.append(1 / (G.in_degrees(e2) - 1))  # 去掉自环的度
 
-        # 江类型转为张量
+        # 将类型转为张量
         edge_type = torch.from_numpy(np.array(edge_type)).type(torch.long)  # uint8 会导致错误
         edge_norm = torch.from_numpy(np.array(edge_norm)).unsqueeze(1).float().to(device)
 
@@ -145,8 +172,8 @@ class GPRDataset(Dataset):
         self.y = y
         self.graphs = graphs
         self.bert_offsets = bert_offsets  # 已经+1了
+        self.gcn_offsets = gcn_offsets  # 图中代词及名称AB的节点索引
         self.bert_embeddings = bert_embeddings  # 有[CLS]
-        self.gcn_offsets = gcn_offsets
 
     def __len__(self):
         return len(self.graphs)
@@ -156,18 +183,20 @@ class GPRDataset(Dataset):
                 self.bert_embeddings[idx], self.y[idx])
 
 
+# collate: 整理
 def collate(samples):  # 对批次数据重新加工
-    #    print(len(samples))#数组。个数是4（批次），
+    #    print(len(samples))#数组。个数是4（batch_size），
 
     # 行列转换变成list
     graphs, bert_offsets, gcn_offsets, bert_embeddings, labels = map(list, zip(*samples))
 
+    # 合并图，要搭配dgl.unbatch()
     batched_graph = dgl.batch(graphs)  # 对图数据进行按批次重组 !!!批次介绍！！
     # 对其它数据进行张量转化
     offsets_bert = torch.stack([torch.LongTensor(x) for x in bert_offsets], dim=0)
     offsets_gcn = torch.stack([torch.LongTensor(x) for x in gcn_offsets], dim=0)
-    one_hot_labels = torch.from_numpy(np.asarray(labels)).type(torch.long)  # .squeeze()#必须要用long
     bert_embeddings = torch.from_numpy(np.asarray(bert_embeddings))
+    one_hot_labels = torch.from_numpy(np.asarray(labels)).type(torch.long)  # .squeeze()#必须要用long
 
     return batched_graph, offsets_bert, offsets_gcn, bert_embeddings, one_hot_labels
 
@@ -175,6 +204,7 @@ def collate(samples):  # 对批次数据重新加工
 # 将训练数据集转化为图数据
 all_graphs, gcn_offsets = getGraphsData(tokens_NoPUNC, offsets_NoPUNC, PROPN_bert, bert_forNoPUNC)
 train_y = getLabelData(df_train_val)  # 获取训练数据集的标签
+
 
 # 将测试数据集转化为图数据
 test_all_graphs, test_gcn_offsets = getGraphsData(test_tokens_NoPUNC, test_offsets_NoPUNC,
@@ -203,10 +233,12 @@ class RGCNModel(nn.Module):  # 多层R-GCN模型
     def forward(self, g):
         # 逐层处理
         for layer in self.layers:
+            # RelGraphConv.forward(self, g, feat, etypes, norm=None, *, presorted=False)
             g.ndata['h'] = layer(g, g.ndata['h'].to(device), etypes=g.edata['rel_type'].to(device),
                                  norm=g.edata['norm'].to(device))
 
         rst_hidden = []
+        # 搭配dgl.batch()
         for sub_g in dgl.unbatch(g):  # 按批次解包
             rst_hidden.append(sub_g.ndata['h'])
         return rst_hidden
@@ -404,7 +436,7 @@ def trainmodel(train_dataloarder, val_dataloarder, model, loss_func, optimizer, 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             if epoch > 20:
-                torch.save(model.state_dict(), 'best_model.pth')
+                torch.save(model.state_dict(), base_dir + 'best_model.pth')
             if epoch > 36: print('Best val loss found: ', best_val_loss)
 
         ################
@@ -464,7 +496,7 @@ for train_index, test_index in kfold.split(df_train_val, train_y):  # 循环5次
     # 测试
     test_loss = 0.
     test_predict = None
-    model.load_state_dict(torch.load('best_model.pth'))
+    model.load_state_dict(torch.load(base_dir + 'best_model.pth'))
     model.to(device)
     model.eval()
 
@@ -499,6 +531,7 @@ def extract_target(df):
     df.loc[~(df['A-coref'] | df['B-coref']), "Neither"] = 1
     df["target"] = 0
     df.loc[df['B-coref'] == 1, "target"] = 1
+    # 满足条件 df["Neither"] == 1 的行的 "target" 列的值设置为2，"target" 列不会自动创建
     df.loc[df["Neither"] == 1, "target"] = 2
     return df
 
@@ -506,6 +539,7 @@ def extract_target(df):
 test_df = extract_target(df_test)
 log_loss(test_df.target, final_test_preds)
 
+# 'result' 预测结果
 result = np.argmax(final_test_preds, -1).reshape(len(final_test_preds), 1)
 
 # 保存结果
@@ -514,6 +548,6 @@ df_sub["ID"] = test_df.ID
 df_sub["target"] = test_df["target"]
 df_sub = df_sub[['ID', "A", "B", "NEITHER", "result", "target"]]
 df_sub.head(50)
-df_sub.to_csv("submission_415_copy3.csv", index=False)
+df_sub.to_csv(base_dir + "submission_415_copy3.csv", index=False)
 
 acc = metrics.accuracy_score(test_df["target"].values, np.argmax(final_test_preds, -1))
