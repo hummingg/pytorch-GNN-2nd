@@ -13,6 +13,16 @@
 
 
 ```shell
+# https://blog.csdn.net/qq_40891747/article/details/116592227
+pip config list
+pip3 install --upgrade pip
+pip3 install jupyter
+
+pip install matplotlib
+
 pip install transformers
 pip install transformers -i https://pypi.python.org/simple
+
+pip install spacy
+python -m spacy download en_core_web_sm
 ```
