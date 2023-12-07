@@ -49,8 +49,8 @@ def savepkl(df, prename=''):
 
         encode_rel = tokenizer.encode_plus(text, max_length=max_len, pad_to_max_length=True)  # 向量化  len=90
 
-        tokens, offsets, masks = tokenize(encode_rel['input_ids'],
-                                          tokenizer, encode_rel['attention_mask'])  # 获取标签偏移
+        # masks：当max_len超过文本长度的时候就会要填充。attention_mask填充的值为0，需要遮掩，表示是pad出来的，不用算注意力。
+        tokens, offsets, masks = tokenize(encode_rel['input_ids'], tokenizer, encode_rel['attention_mask'])  # 获取标签偏移
         offsets_lst.append(offsets)
         tokens_lst.append(tokens)
         # 验证代词位置

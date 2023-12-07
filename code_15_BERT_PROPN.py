@@ -82,10 +82,14 @@ def savepkl(df, name):
     for _, row in tqdm(df.iterrows(), total=len(df)):
         # 循环内部
         text = insert_tag(row)  # 插入标签
-        # 97
+        # 97,含3个特殊标记
         sequence_ind = tokenizer.encode(text)  # 向量化
-        # 94, 3. 42+1->42:30522 46+1->45:30523 64+1->62:30524 ?按前后顺序一次删掉特殊标记
+        # 94, 3. 42+1->42:30522 46+1->45:30523 64+1->62:30524 ?按前后顺序依次删掉特殊标记
         tokens, offsets, _ = tokenize(sequence_ind, tokenizer)  # 获取标签偏移
+        # tokens[offsets[0]] == sequence_ind[offsets[0]+1] 前面删掉了 1 个特殊标记
+        # tokens[offsets[1]] == sequence_ind[offsets[1]+2] 前面删掉了 2 个特殊标记
+        # tokens[offsets[2]] == sequence_ind[offsets[2]+3] 前面删掉了 3 个特殊标记
+        # tokenizer.convert_ids_to_tokens([30522, 30523, 30524]) == THISIS[ABP]
         token_tensor = torch.LongTensor([tokens]).to(device)
         # 错误旧版写法
         # bert_outputs,bert_last_outputs =  model(token_tensor)  #[1, 94, 768] , [1, 768]
