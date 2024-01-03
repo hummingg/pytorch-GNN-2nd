@@ -59,8 +59,8 @@ def savepkl(df, prename=''):
         token_tensor = torch.LongTensor([tokens]).to(device)
         masks_tensor = torch.LongTensor([masks]).to(device)
         # 输入BERT模型
-        bert_outputs, bert_last_outputs = model(token_tensor, attention_mask=masks_tensor)[:2]  # [1, 107, 768] , [1, 768]
-        bert_prediction.append(bert_outputs.cpu().numpy())  # ([1, 266, 768])
+        bert_last_hidden_state, bert_pooler_output = model(token_tensor, attention_mask=masks_tensor)[:2]  # [1, 107, 768] , [1, 768]
+        bert_prediction.append(bert_last_hidden_state.cpu().numpy())  # ([1, 266, 768])
 
     pickle.dump(offsets_lst, open(prename + 'offsets_NoPUNC.pkl', "wb"))
     pickle.dump(tokens_lst, open(prename + 'tokens_NoPUNC_padding.pkl', "wb"))

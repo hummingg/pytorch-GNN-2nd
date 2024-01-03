@@ -339,6 +339,17 @@ class GPRModel(nn.Module):
 
 
 def adjust_learning_rate(optimizers, epoch, lr_value):
+    '''
+    在训练过程的不同阶段动态地调整优化器的学习率.
+    通常用于训练深度神经网络，目的是在训练的不同阶段采用不同的学习率，以提高模型的收敛速度和性能。
+    Args:
+        optimizers:
+        epoch:
+        lr_value:
+
+    Returns:
+
+    '''
     # warm up
     if epoch < 10:
         lr_tmp = 0.00001
@@ -356,6 +367,7 @@ def trainmodel(train_dataloarder, val_dataloarder, model, loss_func, optimizer, 
     reg_lambda = 0.035
     total_epoch = 100
     best_val_loss = 11
+    # Cross-Entropy
     ce_losses = []
     epoch_losses = []
     val_losses = []
